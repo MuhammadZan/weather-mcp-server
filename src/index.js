@@ -4,6 +4,9 @@ import { z } from "zod";
 import axios from "axios";
 import express from "express";
 import cors from "cors";
+import { config } from "dotenv";
+
+config();
 
 // Create Express app for additional endpoints
 const app = express();
