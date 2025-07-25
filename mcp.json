@@ -1,0 +1,34 @@
+{
+    "name": "weather_mcp_server",
+    "version": "1.0.0",
+    "description": "Get current weather information for any city worldwide",
+    "author": "Your Name",
+    "license": "MIT",
+    "server": {
+      "type": "http",
+      "url": "https://your-weather-server.railway.app"
+    },
+    "tools": [
+      {
+        "name": "get-weather",
+        "description": "Get current weather information for any city",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "city": {
+              "type": "string",
+              "description": "The city name to get weather information for"
+            }
+          },
+          "required": ["city"]
+        }
+      }
+    ],
+    "capabilities": [
+      "tools"
+    ],
+    "endpoints": {
+      "tools": "/tools",
+      "health": "/health"
+    }
+  }

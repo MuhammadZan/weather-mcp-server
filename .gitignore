@@ -1,0 +1,14 @@
+/node_modules
+
+/dist
+/build
+/coverage
+/logs
+/tmp
+/public
+/uploads
+/uploads/
+
+.env
+yarn.lock
+package-lock.json
