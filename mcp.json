@@ -2,11 +2,11 @@
     "name": "weather_mcp_server",
     "version": "1.0.0",
     "description": "Get current weather information for any city worldwide",
-    "author": "Your Name",
+    "author": "Muhammad Zain",
     "license": "MIT",
     "server": {
       "type": "http",
-      "url": "https://your-weather-server.railway.app"
+      "url": "https://weather-mcp-server.vercel.app"
     },
     "tools": [
       {

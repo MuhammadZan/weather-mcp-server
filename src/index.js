@@ -107,7 +107,7 @@ app.get('/mcp.json', (req, res) => {
         name: "weather_mcp_server",
         version: "1.0.0",
         description: "Get current weather information for any city worldwide",
-        author: "Your Name",
+        author: "Muhammad Zain",
         license: "MIT",
         server: {
             type: "http",
