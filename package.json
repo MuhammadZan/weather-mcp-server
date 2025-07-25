@@ -1,32 +1,26 @@
 {
-  "name": "weather-mcp-server",
+  "name": "weather-app",
   "version": "1.0.0",
-  "description": "MCP server for weather information",
-  "main": "server.js",
+  "main": "index.js",
   "type": "module",
+  "bin": {
+    "weather": "./build/index.js"
+  },
   "scripts": {
-    "start": "node src/index.js",
-    "dev": "node --watch src/index.js",
-    "build": "echo 'No build step required'",
-    "test": "echo 'No tests configured'"
+    "build": "tsc && node -e \"require('fs').chmodSync('build/index.js', '755')\""
+  },
+  "files": [
+    "build"
+  ],
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.2"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0",
-    "axios": "^1.6.0",
-    "cors": "^2.8.5",
-    "dotenv": "^17.2.1",
-    "express": "^5.1.0",
-    "zod": "^3.22.0"
-  },
-  "engines": {
-    "node": ">=18.0.0"
-  },
-  "keywords": [
-    "mcp",
-    "weather",
-    "openai",
-    "api"
-  ],
-  "author": "Muhammad Zain",
-  "license": "MIT"
+    "@modelcontextprotocol/sdk": "^1.4.0"
+  }
 }
