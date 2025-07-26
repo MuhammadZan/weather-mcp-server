@@ -1,8 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
 import cors from "cors";
-import express from "express";
+import express, { Request, Response } from "express";
 
 const app = express();
 app.use(cors());
@@ -91,294 +91,181 @@ interface ForecastData {
   };
 }
 
-// Create server instance
-const server = new McpServer({
-  name: "weather",
-  version: "1.0.0",
-});
+// Create server instance with weather tools
+function getServer(): McpServer {
+  const server = new McpServer({
+    name: "weather",
+    version: "1.0.0",
+  });
 
-// Register weather tools
-server.tool(
-  "get-current-weather",
-  "Get current weather for a city",
-  {
-    city: z.string().describe("City name (e.g. London, New York, Tokyo)"),
-  },
-  async ({ city }) => {
-    const weatherData = await makeOpenWeatherRequest<WeatherData>("/weather", { q: city });
+  // Register weather tools
+  server.tool(
+    "get-current-weather",
+    "Get current weather for a city",
+    {
+      city: z.string().describe("City name (e.g. London, New York, Tokyo)"),
+    },
+    async ({ city }) => {
+      const weatherData = await makeOpenWeatherRequest<WeatherData>("/weather", { q: city });
 
-    if (!weatherData) {
+      if (!weatherData) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to retrieve weather data for ${city}. Please check the city name and try again.`,
+            },
+          ],
+        };
+      }
+
+      const weather = weatherData.weather[0];
+      const main = weatherData.main;
+      const wind = weatherData.wind;
+
+      const weatherText = [
+        `🌤️ Current Weather in ${weatherData.name}, ${weatherData.sys.country}:`,
+        `Temperature: ${main.temp}°C (feels like ${main.feels_like}°C)`,
+        `Weather: ${weather.description}`,
+        `Humidity: ${main.humidity}%`,
+        `Pressure: ${main.pressure} hPa`,
+        `Wind: ${wind.speed} m/s at ${wind.deg}°`,
+        `Coordinates: ${weatherData.coord.lat}, ${weatherData.coord.lon}`,
+      ].join("\n");
+
       return {
         content: [
           {
             type: "text",
-            text: `Failed to retrieve weather data for ${city}. Please check the city name and try again.`,
+            text: weatherText,
           },
         ],
       };
-    }
+    },
+  );
 
-    const weather = weatherData.weather[0];
-    const main = weatherData.main;
-    const wind = weatherData.wind;
+  server.tool(
+    "get-weather-forecast",
+    "Get 5-day weather forecast for a city",
+    {
+      city: z.string().describe("City name (e.g. London, New York, Tokyo)"),
+    },
+    async ({ city }) => {
+      const forecastData = await makeOpenWeatherRequest<ForecastData>("/forecast", { q: city });
 
-    const weatherText = [
-      `🌤️ Current Weather in ${weatherData.name}, ${weatherData.sys.country}:`,
-      `Temperature: ${main.temp}°C (feels like ${main.feels_like}°C)`,
-      `Weather: ${weather.description}`,
-      `Humidity: ${main.humidity}%`,
-      `Pressure: ${main.pressure} hPa`,
-      `Wind: ${wind.speed} m/s at ${wind.deg}°`,
-      `Coordinates: ${weatherData.coord.lat}, ${weatherData.coord.lon}`,
-    ].join("\n");
+      if (!forecastData) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to retrieve forecast data for ${city}. Please check the city name and try again.`,
+            },
+          ],
+        };
+      }
 
-    return {
-      content: [
-        {
-          type: "text",
-          text: weatherText,
-        },
-      ],
-    };
-  },
-);
+      const forecasts = forecastData.list.slice(0, 8); // Get next 24 hours (3-hour intervals)
 
-server.tool(
-  "get-weather-forecast",
-  "Get 5-day weather forecast for a city",
-  {
-    city: z.string().describe("City name (e.g. London, New York, Tokyo)"),
-  },
-  async ({ city }) => {
-    const forecastData = await makeOpenWeatherRequest<ForecastData>("/forecast", { q: city });
+      const forecastText = [
+        `📅 5-Day Forecast for ${forecastData.city.name}, ${forecastData.city.country}:`,
+        "",
+        ...forecasts.map((forecast) => {
+          const date = new Date(forecast.dt * 1000);
+          const weather = forecast.weather[0];
+          return [
+            `🕐 ${date.toLocaleString()}:`,
+            `   Temperature: ${forecast.main.temp}°C (feels like ${forecast.main.feels_like}°C)`,
+            `   Weather: ${weather.description}`,
+            `   Humidity: ${forecast.main.humidity}%`,
+            `   Wind: ${forecast.wind.speed} m/s`,
+            "",
+          ].join("\n");
+        }),
+      ].join("\n");
 
-    if (!forecastData) {
       return {
         content: [
           {
             type: "text",
-            text: `Failed to retrieve forecast data for ${city}. Please check the city name and try again.`,
+            text: forecastText,
           },
         ],
       };
-    }
+    },
+  );
 
-    const forecasts = forecastData.list.slice(0, 8); // Get next 24 hours (3-hour intervals)
-
-    const forecastText = [
-      `📅 5-Day Forecast for ${forecastData.city.name}, ${forecastData.city.country}:`,
-      "",
-      ...forecasts.map((forecast) => {
-        const date = new Date(forecast.dt * 1000);
-        const weather = forecast.weather[0];
-        return [
-          `🕐 ${date.toLocaleString()}:`,
-          `   Temperature: ${forecast.main.temp}°C (feels like ${forecast.main.feels_like}°C)`,
-          `   Weather: ${weather.description}`,
-          `   Humidity: ${forecast.main.humidity}%`,
-          `   Wind: ${forecast.wind.speed} m/s`,
-          "",
-        ].join("\n");
-      }),
-    ].join("\n");
-
-    return {
-      content: [
-        {
-          type: "text",
-          text: forecastText,
-        },
-      ],
-    };
-  },
-);
+  return server;
+}
 
 // Health check endpoint
 app.get("/health", (req, res) => {
   res.json({ status: "healthy", server: "weather-mcp" });
 });
 
-// MCP endpoint
-app.post("/mcp", async (req, res) => {
-  console.log("MCP request received");
+app.post('/mcp', async (req: Request, res: Response) => {
+  // In stateless mode, create a new instance of transport and server for each request
+  // to ensure complete isolation. A single instance would cause request ID collisions
+  // when multiple clients connect concurrently.
+  
   try {
-    // Set headers for MCP response
-    res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Access-Control-Allow-Origin', '*');
-
-    // Handle MCP protocol requests
-    const { method, params } = req.body;
-
-    if (method === 'initialize') {
-      res.json({
-        jsonrpc: "2.0",
-        id: req.body.id,
-        result: {
-          protocolVersion: "2024-11-05",
-          capabilities: {
-            tools: {}
-          },
-          serverInfo: {
-            name: "weather",
-            version: "1.0.0"
-          }
-        }
-      });
-    } else if (method === 'tools/list') {
-      res.json({
-        jsonrpc: "2.0",
-        id: req.body.id,
-        result: {
-          tools: [
-            {
-              name: "get-current-weather",
-              description: "Get current weather for a city",
-              inputSchema: {
-                type: "object",
-                properties: {
-                  city: {
-                    type: "string",
-                    description: "City name (e.g. London, New York, Tokyo)"
-                  }
-                },
-                required: ["city"]
-              }
-            },
-            {
-              name: "get-weather-forecast",
-              description: "Get 5-day weather forecast for a city",
-              inputSchema: {
-                type: "object",
-                properties: {
-                  city: {
-                    type: "string",
-                    description: "City name (e.g. London, New York, Tokyo)"
-                  }
-                },
-                required: ["city"]
-              }
-            }
-          ]
-        }
-      });
-    } else if (method === 'tools/call') {
-      const { name, arguments: args } = params;
-
-      let result;
-      if (name === 'get-current-weather') {
-        const weatherData = await makeOpenWeatherRequest("/weather", { q: args.city }) as WeatherData | null;
-
-        if (!weatherData) {
-          result = {
-            content: [
-              {
-                type: "text",
-                text: `Failed to retrieve weather data for ${args.city}. Please check the city name and try again.`,
-              },
-            ],
-          };
-        } else {
-          const weather = weatherData.weather[0];
-          const main = weatherData.main;
-          const wind = weatherData.wind;
-
-          const weatherText = [
-            `🌤️ Current Weather in ${weatherData.name}, ${weatherData.sys.country}:`,
-            `Temperature: ${main.temp}°C (feels like ${main.feels_like}°C)`,
-            `Weather: ${weather.description}`,
-            `Humidity: ${main.humidity}%`,
-            `Pressure: ${main.pressure} hPa`,
-            `Wind: ${wind.speed} m/s at ${wind.deg}°`,
-            `Coordinates: ${weatherData.coord.lat}, ${weatherData.coord.lon}`,
-          ].join("\n");
-
-          result = {
-            content: [
-              {
-                type: "text",
-                text: weatherText,
-              },
-            ],
-          };
-        }
-      } else if (name === 'get-weather-forecast') {
-        const forecastData = await makeOpenWeatherRequest("/forecast", { q: args.city }) as ForecastData | null;
-
-        if (!forecastData) {
-          result = {
-            content: [
-              {
-                type: "text",
-                text: `Failed to retrieve forecast data for ${args.city}. Please check the city name and try again.`,
-              },
-            ],
-          };
-        } else {
-          const forecasts = forecastData.list.slice(0, 8);
-
-          const forecastText = [
-            `📅 5-Day Forecast for ${forecastData.city.name}, ${forecastData.city.country}:`,
-            "",
-            ...forecasts.map((forecast) => {
-              const date = new Date(forecast.dt * 1000);
-              const weather = forecast.weather[0];
-              return [
-                `🕐 ${date.toLocaleString()}:`,
-                `   Temperature: ${forecast.main.temp}°C (feels like ${forecast.main.feels_like}°C)`,
-                `   Weather: ${weather.description}`,
-                `   Humidity: ${forecast.main.humidity}%`,
-                `   Wind: ${forecast.wind.speed} m/s`,
-                "",
-              ].join("\n");
-            }),
-          ].join("\n");
-
-          result = {
-            content: [
-              {
-                type: "text",
-                text: forecastText,
-              },
-            ],
-          };
-        }
-      }
-
-      res.json({
-        jsonrpc: "2.0",
-        id: req.body.id,
-        result: result
-      });
-    } else {
-      res.status(400).json({
-        jsonrpc: "2.0",
-        id: req.body.id,
+    const server = getServer(); 
+    const transport: StreamableHTTPServerTransport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: undefined,
+    });
+    res.on('close', () => {
+      console.log('Request closed');
+      transport.close();
+      server.close();
+    });
+    await server.connect(transport);
+    await transport.handleRequest(req, res, req.body);
+  } catch (error) {
+    console.error('Error handling MCP request:', error);
+    if (!res.headersSent) {
+      res.status(500).json({
+        jsonrpc: '2.0',
         error: {
-          code: -32601,
-          message: "Method not found"
-        }
+          code: -32603,
+          message: 'Internal server error',
+        },
+        id: null,
       });
     }
-  } catch (error) {
-    console.error("Error handling MCP request:", error);
-    res.status(500).json({
-      jsonrpc: "2.0",
-      id: req.body.id,
-      error: {
-        code: -32603,
-        message: "Internal error"
-      }
-    });
   }
 });
 
+// SSE notifications not supported in stateless mode
+app.get('/mcp', async (req: Request, res: Response) => {
+  console.log('Received GET MCP request');
+  res.writeHead(405).end(JSON.stringify({
+    jsonrpc: "2.0",
+    error: {
+      code: -32000,
+      message: "Method not allowed."
+    },
+    id: null
+  }));
+});
+
+// Session termination not needed in stateless mode
+app.delete('/mcp', async (req: Request, res: Response) => {
+  console.log('Received DELETE MCP request');
+  res.writeHead(405).end(JSON.stringify({
+    jsonrpc: "2.0",
+    error: {
+      code: -32000,
+      message: "Method not allowed."
+    },
+    id: null
+  }));
+});
 
 // Start the server
-async function main() {
-  app.listen(3000, () => console.error("Weather MCP Server running on SSE"));
-}
-
-main().catch((error) => {
-  console.error("Fatal error in main():", error);
-  process.exit(1);
+const PORT = 3000;
+app.listen(PORT, (error) => {
+  if (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
+  console.log(`Weather MCP Stateless Streamable HTTP Server listening on port ${PORT}`);
 });
