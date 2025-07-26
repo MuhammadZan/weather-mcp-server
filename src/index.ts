@@ -1,6 +1,12 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { z } from "zod";
+import cors from "cors";
+import express from "express";
+
+const app = express();
+app.use(cors());
+
 
 const OPENWEATHER_API_BASE = "https://api.openweathermap.org/data/2.5";
 const API_KEY = "4a9110348fb6b877c589ee1216cb7b45";
@@ -187,11 +193,22 @@ server.tool(
   },
 );
 
+// Health check endpoint
+app.get("/health", (req, res) => {
+  res.json({ status: "healthy", server: "weather-mcp" });
+});
+
+// MCP endpoint
+app.post("/mcp", async (req, res) => {
+  const transport = new SSEServerTransport("/mcp", res);
+  await server.connect(transport);
+  transport.handleMessage(req.body);
+});
+
+
 // Start the server
 async function main() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error("Weather MCP Server running on stdio");
+  app.listen(3000, () => console.error("Weather MCP Server running on SSE"));
 }
 
 main().catch((error) => {
