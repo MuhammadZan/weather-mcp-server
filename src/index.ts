@@ -194,6 +194,19 @@ function getServer(): McpServer {
     },
   );
 
+  server.tool("echo","this tools simply returns whatever it recieves",{
+    message:z.string().describe("the message to echo")
+  },async ({message}) => {
+    return {
+      content: [
+        {
+          type: "text",
+          text: message,
+        },
+      ],
+    };
+  })
+
   return server;
 }
 
